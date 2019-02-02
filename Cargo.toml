@@ -1,0 +1,15 @@
+[package]
+name = "i18n"
+version = "0.1.0"
+authors = ["David Pedersen <david.pdrsn@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+syn = { version = "0.15.22", features = ["full"] }
+quote = "0.6.10"
+proc-macro2 = "0.4.24"
+serde_json = "1.0.38"
+
+[lib]
+proc-macro = true
+path = "src/lib.rs"
