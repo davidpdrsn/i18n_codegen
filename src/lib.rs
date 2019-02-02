@@ -1,8 +1,10 @@
 extern crate proc_macro;
 extern crate proc_macro2;
 
+use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use regex::Regex;
 use serde_json::Value;
 use std::{
     collections::{hash_map::Keys, HashMap, HashSet},
@@ -23,7 +25,9 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let locales = build_locale_names_from_files(&locale_files);
     gen_code(locales, translations, &mut output);
 
-    output.into_iter().collect::<TokenStream>().into()
+    // println!("{}", output);
+
+    output.into()
 }
 
 fn gen_code(locales: Vec<LocaleName>, translations: Translations, out: &mut TokenStream) {
@@ -42,13 +46,21 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
     });
 }
 
+lazy_static! {
+    static ref TRAILING_UNDERSCORE: Regex = Regex::new(r"_$").unwrap();
+}
+
 type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
 
 fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
     let methods = translations.into_iter().map(|(key, translation_for_key)| {
         let method_name = ident(&key.0);
 
-        let placeholders: Placeholders = (translation_for_key.iter().find(|_| true).unwrap().1)
+        let placeholders: Placeholders = (translation_for_key
+            .iter()
+            .next()
+            .expect("no placeholders")
+            .1)
             .1
             .clone();
         let placeholders = placeholders.0.iter().map(|name| {
@@ -67,8 +79,12 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
                         quote! { #translation.to_string() }
                     } else {
                         let pladeholders = pladeholders.0.iter().map(|p| {
+                            let format_key = TRAILING_UNDERSCORE.replace_all(p, "");
+                            let format_key = ident(&format_key);
+
                             let name = ident(p);
-                            quote! { #name = #name }
+
+                            quote! { #format_key = #name }
                         });
 
                         quote! {
@@ -82,7 +98,8 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
                 });
 
         quote! {
-            fn #method_name(locale: &Locale, #(#placeholders),*) -> String {
+            #[allow(missing_docs)]
+            pub fn #method_name(locale: &Locale, #(#placeholders),*) -> String {
                 match locale {
                     #(#branches),*
                 }
@@ -141,13 +158,14 @@ fn build_locale_names_from_files(files: &Vec<PathBuf>) -> Vec<LocaleName> {
 }
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    let crate_root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let crate_root_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let crate_root_path = Path::new(&crate_root_path);
     let locales_dir = crate_root_path.join(locales_path);
 
     std::fs::read_dir(locales_dir)
-        .unwrap()
+        .expect("read dir")
         .map(|entry| {
-            let entry = entry.unwrap();
+            let entry = entry.expect("entry");
             let path = entry.path();
 
             if path.is_dir() {
@@ -167,7 +185,7 @@ struct Key(String);
 struct Translation(String);
 
 #[derive(Debug, Clone)]
-struct Placeholders(Vec<String>);
+struct Placeholders(HashSet<String>);
 
 #[derive(Debug)]
 struct I18nKey {
@@ -177,7 +195,7 @@ struct I18nKey {
 }
 
 fn read_translations_file(path: &PathBuf) -> HashMap<String, String> {
-    let contents = std::fs::read_to_string(path).unwrap();
+    let contents = std::fs::read_to_string(path).expect("read file");
     serde_json::from_str(&contents).expect("failed to parse json")
 }
 
@@ -187,7 +205,7 @@ fn build_keys_from_json(map: HashMap<String, String>) -> Vec<I18nKey> {
             let placeholders = find_placeholders(&value);
 
             I18nKey {
-                key: Key(key),
+                key: Key(key.replace(".", "_")),
                 translation: Translation(value),
                 placeholders: Placeholders(placeholders),
             }
@@ -195,11 +213,11 @@ fn build_keys_from_json(map: HashMap<String, String>) -> Vec<I18nKey> {
         .collect()
 }
 
-fn find_placeholders(s: &str) -> Vec<String> {
+fn find_placeholders(s: &str) -> HashSet<String> {
     // TODO: Handle invalid input with unbalanced braces
     // TODO: Escaping of {}
 
-    let mut acc = vec![];
+    let mut acc = HashSet::new();
 
     let mut inside_placeholder = false;
     let mut current_placeholder = String::new();
@@ -209,7 +227,8 @@ fn find_placeholders(s: &str) -> Vec<String> {
             inside_placeholder = true;
         } else if c == '}' {
             inside_placeholder = false;
-            acc.push(current_placeholder);
+            current_placeholder.push('_');
+            acc.insert(current_placeholder);
             current_placeholder = String::new();
         } else if inside_placeholder {
             current_placeholder.push(c)
@@ -223,7 +242,11 @@ fn find_placeholders(s: &str) -> Vec<String> {
 struct LocaleName(String);
 
 fn locale_name_from_translations_file_path(path: &PathBuf) -> LocaleName {
-    let file_stem = path.file_stem().unwrap().to_str().unwrap();
+    let file_stem = path
+        .file_stem()
+        .expect("file stem")
+        .to_str()
+        .expect("file to string");
     let name = uppercase_first_letter(file_stem);
     LocaleName(name)
 }
@@ -269,20 +292,20 @@ mod test {
 
         assert_eq!(keys[0].key.0, "greeting");
         assert_eq!(keys[0].translation.0, "Hello {name}");
-        assert_eq!(keys[0].placeholders.0, vec!["name"]);
+        assert_eq!(to_vec(keys[0].placeholders.0.clone()), vec!["name_"]);
 
         assert_eq!(keys[1].key.0, "hello");
         assert_eq!(keys[1].translation.0, "Hello, World!");
-        assert_eq!(keys[1].placeholders.0, Vec::<String>::new());
+        assert_eq!(to_vec(keys[1].placeholders.0.clone()), Vec::<String>::new());
     }
 
     #[test]
     fn test_parsing_placeholders() {
-        assert_eq!(find_placeholders("Hello"), Vec::<String>::new());
-        assert_eq!(find_placeholders("Hello {name}"), vec!["name"]);
+        assert_eq!(to_vec(find_placeholders("Hello")), Vec::<String>::new());
+        assert_eq!(to_vec(find_placeholders("Hello {name}")), vec!["name_"]);
         assert_eq!(
-            find_placeholders("{greeting} {name}"),
-            vec!["greeting", "name"]
+            to_vec(find_placeholders("{greeting} {name}")),
+            vec!["greeting_", "name_"]
         );
     }
 
@@ -308,5 +331,9 @@ mod test {
             (translations[&Key("greeting".to_string())][&LocaleName("En".to_string())].0).0,
             "Hello {name}",
         );
+    }
+
+    fn to_vec<T: std::hash::Hash + Eq>(set: HashSet<T>) -> Vec<T> {
+        set.into_iter().collect()
     }
 }
