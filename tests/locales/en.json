@@ -1,4 +1,8 @@
 {
+    "hello": "Hello, World!",
     "greeting": "Hello {name}",
-    "hello": "Hello, World!"
+    "missing_interpolation_da": "en foo {word}",
+    "missing_interpolation_en": "en foo",
+    "rust_keyword": "yo {type}",
+    "duplicate_placeholders": "Hey {name}. Is your name {name}?"
 }
