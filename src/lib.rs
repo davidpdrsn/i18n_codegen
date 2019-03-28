@@ -44,7 +44,7 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
 
     out.extend(quote! {
         #[allow(missing_docs)]
-        #[derive(Copy, Clone)]
+        #[derive(Copy, Clone, Debug)]
         pub enum Locale {
             #(#variants),*
         }
@@ -156,6 +156,7 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
         }
 
         #[allow(missing_docs)]
+        #[derive(Copy, Clone, Debug)]
         pub struct I18n {
             locale: Locale,
         }
