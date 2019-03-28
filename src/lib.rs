@@ -47,7 +47,7 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
 }
 
 lazy_static! {
-    static ref TRAILING_UNDERSCORE: Regex = Regex::new(r"_$").unwrap();
+    static ref TRAILING_UNDERSCORE: Regex = Regex::new(r"_$").expect("failed to parse regex");
 }
 
 type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
@@ -158,7 +158,8 @@ fn build_locale_names_from_files(files: &Vec<PathBuf>) -> Vec<LocaleName> {
 }
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    let crate_root_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let crate_root_path =
+        std::env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR env var");
     let crate_root_path = Path::new(&crate_root_path);
     let locales_dir = crate_root_path.join(locales_path);
 
@@ -174,6 +175,11 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
             } else {
                 path
             }
+        })
+        .filter(|path| {
+            path.extension()
+                .map(|ext| ext == "json")
+                .unwrap_or_else(|| false)
         })
         .collect()
 }
@@ -264,6 +270,16 @@ mod test {
     #[allow(unused_imports)]
     use super::*;
 
+    macro_rules! hashset {
+        ( $( $item:expr ),* ) => {
+            {
+                let mut s = std::collections::HashSet::new();
+                $( s.insert($item); )*
+                s
+            }
+        }
+    }
+
     #[test]
     fn test_find_locale_files() {
         let input = "tests/locales";
@@ -301,11 +317,15 @@ mod test {
 
     #[test]
     fn test_parsing_placeholders() {
-        assert_eq!(to_vec(find_placeholders("Hello")), Vec::<String>::new());
-        assert_eq!(to_vec(find_placeholders("Hello {name}")), vec!["name_"]);
+        assert_eq!(find_placeholders("Hello"), HashSet::<String>::new());
         assert_eq!(
-            to_vec(find_placeholders("{greeting} {name}")),
-            vec!["greeting_", "name_"]
+            find_placeholders("Hello {name}"),
+            hashset!["name_".to_string()]
+        );
+
+        assert_eq!(
+            find_placeholders("{greeting} {name}"),
+            hashset!["greeting_".to_string(), "name_".to_string()],
         );
     }
 
