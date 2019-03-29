@@ -1,3 +1,6 @@
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 i18n_codegen::i18n!("tests/locales");
 
 #[cfg(test)]
@@ -8,6 +11,8 @@ mod tests {
     fn it_works() {
         assert_eq!("Hello, World!", I18n::new(Locale::En).t(Strings::Hello));
         assert_eq!("Hej, Verden!", I18n::new(Locale::Da).t(Strings::Hello));
+
+        assert_eq!("value", I18n::new(Locale::En).t(Strings::Key1000));
     }
 
     #[test]

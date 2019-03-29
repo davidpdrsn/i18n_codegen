@@ -24,6 +24,7 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let locale_files = find_locale_files(input);
 
     let translations = build_translations_from_files(&locale_files);
+
     let locales = build_locale_names_from_files(&locale_files);
     gen_code(locales, translations, &mut output);
 
@@ -236,7 +237,6 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
     });
     let pwd = PathBuf::from(cargo_dir);
     let full_locales_path = pwd.join(locales_path);
-    dbg!(&full_locales_path);
 
     std::fs::read_dir(full_locales_path)
         .expect("read dir")
