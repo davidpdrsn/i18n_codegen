@@ -246,7 +246,8 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
         });
 
         methods.push(quote! {
-            fn #name(self, #(#args),*) -> String {
+            #[allow(missing_docs)]
+            pub fn #name(self, #(#args),*) -> String {
                 match self {
                     #(#match_arms),*
                 }
@@ -257,7 +258,8 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
     let placeholder_newtypes = all_unique_placeholders.into_iter().map(|placeholder| {
         let placeholder = ident(&placeholder.to_string().to_camel_case());
         quote! {
-            struct #placeholder<'a>(pub &'a str);
+            #[allow(missing_docs)]
+            pub struct #placeholder<'a>(pub &'a str);
         }
     });
 
