@@ -237,7 +237,6 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
 
     let crate_root_path = Path::new(&crate_root_path);
     let locales_dir = crate_root_path.join(locales_path);
-    dbg!(&locales_dir);
 
     std::fs::read_dir(locales_dir)
         .expect("read dir")
