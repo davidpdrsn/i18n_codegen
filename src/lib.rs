@@ -13,10 +13,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use syn::Type;
-use heapsize::HeapSizeOf;
-
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -28,9 +24,6 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let locale_files = find_locale_files(input);
 
     let translations = build_translations_from_files(&locale_files);
-
-    let heap_size = translations.heap_size_of_children();
-    dbg!(heap_size);
 
     let locales = build_locale_names_from_files(&locale_files);
     gen_code(locales, translations, &mut output);
@@ -266,16 +259,6 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
 
 type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
 
-macro_rules! impl_HeapSizeOf {
-    ( $name:ident ) => {
-        impl HeapSizeOf for $name {
-            fn heap_size_of_children(&self) -> usize {
-                self.0.heap_size_of_children()
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct LocaleName(String);
 
@@ -287,11 +270,6 @@ struct Translation(String);
 
 #[derive(Debug, Clone)]
 struct Placeholders(HashSet<String>);
-
-impl_HeapSizeOf!(Key);
-impl_HeapSizeOf!(LocaleName);
-impl_HeapSizeOf!(Translation);
-impl_HeapSizeOf!(Placeholders);
 
 #[derive(Debug)]
 struct I18nKey {
