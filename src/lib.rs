@@ -230,15 +230,7 @@ fn print_env_vars() {
 }
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    print_env_vars();
-
-    let crate_root_path =
-        std::env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR env var");
-
-    let crate_root_path = Path::new(&crate_root_path);
-    let locales_dir = crate_root_path.join(locales_path);
-
-    std::fs::read_dir(locales_dir)
+    std::fs::read_dir(locales_path)
         .expect("read dir")
         .map(|entry| {
             let entry = entry.expect("entry");
@@ -363,12 +355,9 @@ mod test {
 
         let crate_root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
 
-        let expected_paths = vec![
-            crate_root_path.join(input).join(PathBuf::from("en.json")),
-            crate_root_path.join(input).join(PathBuf::from("da.json")),
-        ];
-
-        assert_eq!(locale_files, expected_paths,);
+        assert_eq!(locale_files.len(), 2);
+        assert!(locale_files[0].to_str().unwrap().contains("en.json"));
+        assert!(locale_files[1].to_str().unwrap().contains("da.json"));
     }
 
     #[test]
