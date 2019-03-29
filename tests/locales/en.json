@@ -4,5 +4,6 @@
     "missing_interpolation_da": "en foo {word}",
     "missing_interpolation_en": "en foo",
     "rust_keyword": "yo {type}",
-    "duplicate_placeholders": "Hey {name}. Is your name {name}?"
+    "duplicate_placeholders": "Hey {name}. Is your name {name}?",
+    "two_placeholders": "en {one} {two}"
 }

@@ -4,5 +4,6 @@
     "missing_interpolation_da": "da foo",
     "missing_interpolation_en": "da foo {word}",
     "rust_keyword": "hva så {type}",
-    "duplicate_placeholders": "Hej {name}. Er dit navn {name}?"
+    "duplicate_placeholders": "Hej {name}. Er dit navn {name}?",
+    "two_placeholders": "da {one} {two}"
 }
