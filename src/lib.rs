@@ -13,6 +13,10 @@ use std::{
     path::{Path, PathBuf},
 };
 use syn::Type;
+use heapsize::HeapSizeOf;
+
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -24,6 +28,9 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let locale_files = find_locale_files(input);
 
     let translations = build_translations_from_files(&locale_files);
+
+    let heap_size = translations.heap_size_of_children();
+    dbg!(heap_size);
 
     let locales = build_locale_names_from_files(&locale_files);
     gen_code(locales, translations, &mut output);
@@ -55,8 +62,6 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
 lazy_static! {
     static ref TRAILING_UNDERSCORE: Regex = Regex::new(r"_$").expect("failed to parse regex");
 }
-
-type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
 
 fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
     let mut variants = vec![];
@@ -259,6 +264,21 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
         .collect()
 }
 
+type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
+
+macro_rules! impl_HeapSizeOf {
+    ( $name:ident ) => {
+        impl HeapSizeOf for $name {
+            fn heap_size_of_children(&self) -> usize {
+                self.0.heap_size_of_children()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct LocaleName(String);
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct Key(String);
 
@@ -267,6 +287,11 @@ struct Translation(String);
 
 #[derive(Debug, Clone)]
 struct Placeholders(HashSet<String>);
+
+impl_HeapSizeOf!(Key);
+impl_HeapSizeOf!(LocaleName);
+impl_HeapSizeOf!(Translation);
+impl_HeapSizeOf!(Placeholders);
 
 #[derive(Debug)]
 struct I18nKey {
@@ -318,9 +343,6 @@ fn find_placeholders(s: &str) -> HashSet<String> {
 
     acc
 }
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct LocaleName(String);
 
 fn locale_name_from_translations_file_path(path: &PathBuf) -> LocaleName {
     let file_stem = path

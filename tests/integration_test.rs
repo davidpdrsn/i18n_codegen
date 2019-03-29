@@ -1,6 +1,3 @@
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 i18n_codegen::i18n!("tests/locales");
 
 #[cfg(test)]
