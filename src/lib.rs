@@ -241,6 +241,8 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
 
     let full_locales_path = start_dir.join(locales_path);
 
+    dbg!(&full_locales_path);
+
     std::fs::read_dir(full_locales_path)
         .expect("read dir")
         .map(|entry| {
