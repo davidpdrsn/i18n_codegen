@@ -230,7 +230,10 @@ fn print_env_vars() {
 }
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    std::fs::read_dir(locales_path)
+    let pwd = env::current_dir().expect("current dir");
+    let full_locales_path = pwd.join(locales_path);
+
+    std::fs::read_dir(full_locales_path)
         .expect("read dir")
         .map(|entry| {
             let entry = entry.expect("entry");
