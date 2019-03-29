@@ -220,10 +220,17 @@ fn build_locale_names_from_files(files: &[PathBuf]) -> Vec<LocaleName> {
         .collect()
 }
 
-fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    for (key, value) in std::env::vars() {
+fn print_env_vars() {
+    let mut vars = std::env::vars().into_iter().collect::<Vec<_>>();
+    vars.sort_by_key(|(k, _)| k.clone());
+
+    for (key, value) in vars {
         println!("{} = {:?}", key, value);
     }
+}
+
+fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
+    print_env_vars();
 
     let crate_root_path =
         std::env::var("CARGO_MANIFEST_DIR").expect("missing CARGO_MANIFEST_DIR env var");
