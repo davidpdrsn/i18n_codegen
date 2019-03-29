@@ -230,17 +230,10 @@ fn print_env_vars() {
 }
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    let start_dir: String = env::var("CARGO_MANIFEST_DIR").ok().unwrap_or_else(|| {
-        env::current_dir()
-            .expect("`current_dir`")
-            .to_str()
-            .expect("`current_dir` to string")
-            .to_string()
-    });
-    let start_dir = Path::new(&start_dir);
-
-    let full_locales_path = start_dir.join(locales_path);
-
+    let cargo_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("Env var `CARGO_MANIFEST_DIR` was missing");
+    let pwd = PathBuf::from(cargo_dir);
+    let full_locales_path = pwd.join(locales_path);
     dbg!(&full_locales_path);
 
     std::fs::read_dir(full_locales_path)
