@@ -35,6 +35,27 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     output.into()
 }
 
+type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct LocaleName(String);
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct Key(String);
+
+#[derive(Debug)]
+struct Translation(String);
+
+#[derive(Debug, Clone)]
+struct Placeholders(HashSet<String>);
+
+#[derive(Debug)]
+struct I18nKey {
+    key: Key,
+    translation: Translation,
+    placeholders: Placeholders,
+}
+
 fn gen_code(locales: Vec<LocaleName>, translations: Translations, out: &mut TokenStream) {
     gen_locale_enum(locales, out);
     gen_i18n_struct(translations, out);
@@ -65,8 +86,7 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
 
         let placeholders = translations
             .iter()
-            .flat_map(|(_locale, (_, placeholders))| placeholders.0.clone())
-            .map(|placeholder| ident(&placeholder))
+            .flat_map(|(_, (_, placeholders))| placeholders.0.iter().map(|p| ident(p)))
             .collect::<HashSet<_>>();
 
         // enum variant
@@ -96,7 +116,7 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
                 quote! { format!(#translation) }
             } else {
                 let fields = placeholders.iter().filter_map(|placeholder| {
-                    let mut format_key = placeholder.to_string().clone();
+                    let mut format_key = placeholder.to_string();
                     format_key.truncate(format_key.len() - 1);
 
                     if translation.contains(&format!("{{{}}}", format_key)) {
@@ -219,20 +239,9 @@ fn build_locale_names_from_files(files: &[PathBuf]) -> Vec<LocaleName> {
         .collect()
 }
 
-fn print_env_vars() {
-    let mut vars = std::env::vars().into_iter().collect::<Vec<_>>();
-    vars.sort_by_key(|(k, _)| k.clone());
-
-    for (key, value) in vars {
-        println!("{} = {:?}", key, value);
-    }
-}
-
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
-    let cargo_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| {
-        print_env_vars();
-        panic!("Env var `CARGO_MANIFEST_DIR` was missing")
-    });
+    let cargo_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("Env var `CARGO_MANIFEST_DIR` was missing");
     let pwd = PathBuf::from(cargo_dir);
     let full_locales_path = pwd.join(locales_path);
 
@@ -255,27 +264,6 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
                 .unwrap_or_else(|| false)
         })
         .collect()
-}
-
-type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct LocaleName(String);
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct Key(String);
-
-#[derive(Debug)]
-struct Translation(String);
-
-#[derive(Debug, Clone)]
-struct Placeholders(HashSet<String>);
-
-#[derive(Debug)]
-struct I18nKey {
-    key: Key,
-    translation: Translation,
-    placeholders: Placeholders,
 }
 
 fn read_translations_file(path: &PathBuf) -> HashMap<String, String> {
