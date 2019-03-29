@@ -6,95 +6,62 @@ mod tests {
 
     #[test]
     fn it_works() {
-        assert_eq!("Hello, World!", I18n::new(Locale::En).t(Strings::Hello));
-        assert_eq!("Hej, Verden!", I18n::new(Locale::Da).t(Strings::Hello));
+        assert_eq!("Hello, World!", Locale::En.hello());
+        assert_eq!("Hej, Verden!", Locale::Da.hello());
     }
 
     #[test]
     fn it_works_with_interpolations() {
-        assert_eq!(
-            "Hello Bob",
-            I18n::new(Locale::En).t(Strings::Greeting {
-                name_: "Bob".to_string()
-            })
-        );
-
-        assert_eq!(
-            "Hej Bob",
-            I18n::new(Locale::Da).t(Strings::Greeting {
-                name_: "Bob".to_string()
-            })
-        );
+        assert_eq!("Hello Bob", Locale::En.greeting(Name("Bob")));
+        assert_eq!("Hej Bob", Locale::Da.greeting(Name("Bob")));
     }
 
     #[test]
     fn it_works_when_some_locales_are_missing_interpolations() {
         assert_eq!(
             "en foo word",
-            en().t(Strings::MissingInterpolationDa {
-                word_: "word".to_string()
-            }),
+            Locale::En.missing_interpolation_da(Word("word")),
         );
-        assert_eq!(
-            "da foo",
-            da().t(Strings::MissingInterpolationDa {
-                word_: "word".to_string()
-            }),
-        );
+        assert_eq!("da foo", Locale::Da.missing_interpolation_da(Word("word")));
 
-        assert_eq!(
-            "en foo",
-            en().t(Strings::MissingInterpolationEn {
-                word_: "word".to_string()
-            }),
-        );
+        assert_eq!("en foo", Locale::En.missing_interpolation_en(Word("word")));
         assert_eq!(
             "da foo word",
-            da().t(Strings::MissingInterpolationEn {
-                word_: "word".to_string()
-            }),
+            Locale::Da.missing_interpolation_en(Word("word")),
         );
     }
 
     #[test]
     fn it_works_when_placeholders_are_rust_keywords() {
-        assert_eq!(
-            "yo dawg",
-            en().t(Strings::RustKeyword {
-                type_: "dawg".to_string()
-            }),
-        );
-        assert_eq!(
-            "hva så hund",
-            da().t(Strings::RustKeyword {
-                type_: "hund".to_string()
-            }),
-        );
+        assert_eq!("yo dawg", Locale::En.rust_keyword(Type("dawg")));
+        assert_eq!("hva så hund", Locale::Da.rust_keyword(Type("hund")));
     }
 
     #[test]
     fn it_works_for_duplicate_placeholders() {
         assert_eq!(
             "Hey Bob. Is your name Bob?",
-            en().t(Strings::DuplicatePlaceholders {
-                name_: "Bob".to_string()
-            }),
+            Locale::En.duplicate_placeholders(Name("Bob"))
         );
+
         assert_eq!(
             "Hej Bob. Er dit navn Bob?",
-            da().t(Strings::DuplicatePlaceholders {
-                name_: "Bob".to_string()
-            }),
+            Locale::Da.duplicate_placeholders(Name("Bob"))
+        );
+    }
+
+    #[test]
+    fn it_works_for_multiple_placeholders() {
+        assert_eq!(
+            "en one two",
+            Locale::En.two_placeholders(One("one"), Two("two"))
+        );
+
+        assert_eq!(
+            "da one two",
+            Locale::Da.two_placeholders(One("one"), Two("two"))
         );
     }
 
     // error when strings are missing in some languages
-
-    fn en() -> I18n {
-        I18n::new(Locale::En)
-    }
-
-    fn da() -> I18n {
-        I18n::new(Locale::Da)
-    }
 }
