@@ -1,18 +1,16 @@
+#![deny(unused_imports, dead_code, unused_variables)]
+
 extern crate proc_macro;
 extern crate proc_macro2;
 
 use heck::CamelCase;
-use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use regex::Regex;
-use serde_json::Value;
 use std::{
-    collections::{hash_map::Keys, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     env,
     path::{Path, PathBuf},
 };
-use syn::Type;
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -72,128 +70,6 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
         }
     });
 }
-
-// fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
-//     let mut variants = vec![];
-//     let mut translate_match_arms = vec![];
-
-//     for (key, translations) in translations {
-//         let name = ident(&key.0.to_camel_case());
-
-//         let placeholders = translations
-//             .iter()
-//             .flat_map(|(_, (_, placeholders))| placeholders.0.iter().map(|p| ident(p)))
-//             .collect::<HashSet<_>>();
-
-//         // enum variant
-
-//         let variant = if placeholders.is_empty() {
-//             quote! {
-//                 #name
-//             }
-//         } else {
-//             let fields = placeholders.iter().map(|placeholder| {
-//                 quote! { #placeholder: String }
-//             });
-
-//             quote! {
-//                 #name { #(#fields),* }
-//             }
-//         };
-//         variants.push(variant);
-
-//         // matching of locale and string
-
-//         let locale_match_arms = translations.iter().map(|(locale, (translation, _))| {
-//             let locale = ident(&locale.0);
-//             let translation = translation.0.to_string();
-
-//             let body = if placeholders.is_empty() {
-//                 quote! { format!(#translation) }
-//             } else {
-//                 let fields = placeholders.iter().filter_map(|placeholder| {
-//                     let mut format_key = placeholder.to_string();
-//                     format_key.truncate(format_key.len() - 1);
-
-//                     if translation.contains(&format!("{{{}}}", format_key)) {
-//                         let format_key = ident(&format_key);
-//                         Some(quote! { #format_key = #placeholder })
-//                     } else {
-//                         None
-//                     }
-//                 });
-//                 quote! { format!(#translation, #(#fields),*) }
-//             };
-
-//             quote! {
-//                 Locale::#locale => #body
-//             }
-//         });
-
-//         let match_pattern = if placeholders.is_empty() {
-//             quote! { Strings::#name }
-//         } else {
-//             let fields = placeholders.iter().map(|placeholder| {
-//                 quote! { #placeholder }
-//             });
-//             quote! {
-//                 Strings::#name { #(#fields),* }
-//             }
-//         };
-
-//         translate_match_arms.push(quote! {
-//             #match_pattern => {
-//                 match locale {
-//                     #(#locale_match_arms),*
-//                 }
-//             }
-//         })
-//     }
-
-//     out.extend(quote! {
-//         #[allow(missing_docs)]
-//         pub enum Strings {
-//             #(#variants),*
-//         }
-
-//         impl Strings {
-//             #[allow(missing_docs)]
-//             pub fn translate(&self, locale: Locale) -> String {
-//                 match self {
-//                     #(#translate_match_arms),*
-//                 }
-//             }
-
-//             #[allow(missing_docs)]
-//             pub fn t(&self, locale: Locale) -> String {
-//                 self.translate(locale)
-//             }
-//         }
-
-//         #[allow(missing_docs)]
-//         #[derive(Copy, Clone, Debug)]
-//         pub struct I18n {
-//             locale: Locale,
-//         }
-
-//         impl I18n {
-//             #[allow(missing_docs)]
-//             pub fn new(locale: Locale) -> Self {
-//                 Self { locale }
-//             }
-
-//             #[allow(missing_docs)]
-//             pub fn translate(&self, iden: Strings) -> String {
-//                 iden.t(self.locale)
-//             }
-
-//             #[allow(missing_docs)]
-//             pub fn t(&self, iden: Strings) -> String {
-//                 self.translate(iden)
-//             }
-//         }
-//     });
-// }
 
 fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
     let mut methods = vec![];
@@ -307,7 +183,7 @@ fn build_translations_from_files(files: &[PathBuf]) -> Translations {
 
 fn build_locale_names_from_files(files: &[PathBuf]) -> Vec<LocaleName> {
     files
-        .into_iter()
+        .iter()
         .map(|file| locale_name_from_translations_file_path(&file))
         .collect()
 }
@@ -421,8 +297,6 @@ mod test {
         let input = "tests/locales";
 
         let locale_files = find_locale_files(input);
-
-        let crate_root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
 
         assert_eq!(locale_files.len(), 2);
         assert!(locale_files[0].to_str().unwrap().contains("en.json"));
