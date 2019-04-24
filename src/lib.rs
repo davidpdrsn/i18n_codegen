@@ -3,6 +3,8 @@
 extern crate proc_macro;
 extern crate proc_macro2;
 
+mod parse;
+
 use heck::CamelCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -235,28 +237,14 @@ fn build_keys_from_json(map: HashMap<String, String>) -> Vec<I18nKey> {
 }
 
 fn find_placeholders(s: &str) -> HashSet<String> {
-    // TODO: Handle invalid input with unbalanced braces
-    // TODO: Escaping of {}
-
-    let mut acc = HashSet::new();
-
-    let mut inside_placeholder = false;
-    let mut current_placeholder = String::new();
-
-    for c in s.chars() {
-        if c == '{' {
-            inside_placeholder = true;
-        } else if c == '}' {
-            inside_placeholder = false;
-            current_placeholder.push('_');
-            acc.insert(current_placeholder);
-            current_placeholder = String::new();
-        } else if inside_placeholder {
-            current_placeholder.push(c)
-        }
+    let raw_placeholders = parse::find_placeholders(s);
+    let mut final_placeholders = HashSet::with_capacity(raw_placeholders.len());
+    for entry in raw_placeholders {
+        let mut entry = entry.clone();
+        entry.push('_');
+        final_placeholders.insert(entry);
     }
-
-    acc
+    final_placeholders
 }
 
 fn locale_name_from_translations_file_path(path: &PathBuf) -> LocaleName {
@@ -329,6 +317,15 @@ mod test {
         assert_eq!(
             find_placeholders("{greeting} {name}"),
             hashset!["greeting_".to_string(), "name_".to_string()],
+        );
+    }
+
+    #[test]
+    fn test_parsing_placeholders_with_escaping() {
+        assert_eq!(find_placeholders("Hello {{foo}}"), hashset![]);
+        assert_eq!(
+            find_placeholders("Hello {foo} {{bar}} {baz}"),
+            hashset!["foo_".to_string(), "baz_".to_string()]
         );
     }
 
