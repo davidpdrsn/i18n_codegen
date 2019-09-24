@@ -33,7 +33,10 @@ impl PlaceholderParser for DefaultPlaceholderParser {
                 inside_placeholder = true;
             } else if c == self.end {
                 inside_placeholder = false;
+
+                // This is necessary to allow placeholder to be Rust keywords
                 current_placeholder.push('_');
+
                 acc.insert(current_placeholder);
                 current_placeholder = String::new();
             } else if inside_placeholder {
