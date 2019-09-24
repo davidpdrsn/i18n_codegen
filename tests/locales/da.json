@@ -1,5 +1,6 @@
 {
     "hello": "Hej, Verden!",
+    "hello_newline": "Hej\nVerden!",
     "greeting": "Hej {name}",
     "missing_interpolation_da": "da foo",
     "missing_interpolation_en": "da foo {word}",

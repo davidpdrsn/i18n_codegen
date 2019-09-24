@@ -5,8 +5,8 @@ extern crate proc_macro2;
 
 mod placeholder_parsing;
 
-use placeholder_parsing::{DefaultPlaceholderParser, PlaceholderParser};
 use heck::CamelCase;
+use placeholder_parsing::find_placeholders;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::{
@@ -19,9 +19,18 @@ use syn::parse::{self, Parse, ParseStream};
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse::<Input>(input).unwrap_or_else(|e| panic!("{}", e));
-    let locale_files = find_locale_files(&input.filename);
-    let translations = build_translations_from_files(&locale_files);
-    let locales = build_locale_names_from_files(&locale_files);
+    let file_paths = find_locale_files(&input.filename);
+
+    let paths_and_contents = file_paths
+        .iter()
+        .map(|path| {
+            let contents = std::fs::read_to_string(path).expect("read file");
+            (path, contents)
+        })
+        .collect::<Vec<_>>();
+
+    let translations = build_translations_from_files(&paths_and_contents);
+    let locales = build_locale_names_from_files(&file_paths);
 
     let mut output = TokenStream::new();
     gen_code(locales, translations, &mut output);
@@ -164,12 +173,12 @@ fn ident(name: &str) -> Ident {
     Ident::new(name, Span::call_site())
 }
 
-fn build_translations_from_files(files: &[PathBuf]) -> Translations {
-    let keys_per_locale: Vec<(LocaleName, I18nKey)> = files
+fn build_translations_from_files(paths_and_contents: &[(&PathBuf, String)]) -> Translations {
+    let keys_per_locale: Vec<(LocaleName, I18nKey)> = paths_and_contents
         .iter()
-        .flat_map(|file| {
-            let locale_name = locale_name_from_translations_file_path(&file);
-            let keys_in_file = build_keys_from_json(read_translations_file(file));
+        .flat_map(|(path, contents)| {
+            let locale_name = locale_name_from_translations_file_path(&path);
+            let keys_in_file = build_keys_from_json(parse_translations_file(&contents));
 
             keys_in_file
                 .into_iter()
@@ -193,10 +202,10 @@ fn build_translations_from_files(files: &[PathBuf]) -> Translations {
     acc
 }
 
-fn build_locale_names_from_files(files: &[PathBuf]) -> Vec<LocaleName> {
-    files
+fn build_locale_names_from_files(file_paths: &[PathBuf]) -> Vec<LocaleName> {
+    file_paths
         .iter()
-        .map(|file| locale_name_from_translations_file_path(&file))
+        .map(|file_path| locale_name_from_translations_file_path(&file_path))
         .collect()
 }
 
@@ -227,16 +236,14 @@ fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
         .collect()
 }
 
-fn read_translations_file(path: &PathBuf) -> HashMap<String, String> {
-    let contents = std::fs::read_to_string(path).expect("read file");
-    serde_json::from_str(&contents).expect("failed to parse JSON file into HashMap<String, String>")
+fn parse_translations_file(contents: &str) -> HashMap<&str, String> {
+    serde_json::from_str(&contents).unwrap_or_else(|e| panic!("Error parsing json file: {}", e))
 }
 
-fn build_keys_from_json(map: HashMap<String, String>) -> Vec<I18nKey> {
-    let parser = DefaultPlaceholderParser::default();
+fn build_keys_from_json(map: HashMap<&str, String>) -> Vec<I18nKey> {
     map.into_iter()
         .map(|(key, value)| {
-            let placeholders = parser.find_placeholders(&value);
+            let placeholders = find_placeholders(&value, "{", "}");
 
             I18nKey {
                 key: Key(key.replace(".", "_")),
@@ -287,7 +294,8 @@ mod test {
         let crate_root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
         let locale_path = crate_root_path.join(input).join(PathBuf::from("en.json"));
 
-        let map = read_translations_file(&locale_path);
+        let contents = std::fs::read_to_string(&locale_path).unwrap();
+        let map = parse_translations_file(&contents);
         let mut keys = build_keys_from_json(map);
         keys.sort_by_key(|key| key.key.0.clone());
 
@@ -312,7 +320,15 @@ mod test {
         let input = "tests/locales";
         let locale_files = find_locale_files(input);
 
-        let translations = build_translations_from_files(&locale_files);
+        let paths_and_contents = locale_files
+            .iter()
+            .map(|path| {
+                let contents = std::fs::read_to_string(path).expect("read file");
+                (path, contents)
+            })
+            .collect::<Vec<_>>();
+
+        let translations = build_translations_from_files(&paths_and_contents);
 
         assert_eq!(
             (translations[&Key("greeting".to_string())][&LocaleName("En".to_string())].0).0,

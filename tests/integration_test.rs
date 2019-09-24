@@ -63,5 +63,11 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_supports_strings_with_newlines() {
+        assert_eq!("Hello\nWorld!", Locale::En.hello_newline());
+        assert_eq!("Hej\nVerden!", Locale::Da.hello_newline());
+    }
+
     // error when strings are missing in some languages
 }

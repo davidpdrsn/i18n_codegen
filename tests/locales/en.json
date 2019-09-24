@@ -1,5 +1,6 @@
 {
     "hello": "Hello, World!",
+    "hello_newline": "Hello\nWorld!",
     "greeting": "Hello {name}",
     "missing_interpolation_da": "en foo {word}",
     "missing_interpolation_en": "en foo",
