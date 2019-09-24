@@ -11,19 +11,16 @@ use std::{
     env,
     path::{Path, PathBuf},
 };
+use syn::parse::{self, Parse, ParseStream};
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: TokenStream = input.into();
-    let input = input.to_string().replace("\"", "");
+    let input = syn::parse::<Input>(input).unwrap_or_else(|e| panic!("{}", e));
+    let locale_files = find_locale_files(&input.filename);
+    let translations = build_translations_from_files(&locale_files);
+    let locales = build_locale_names_from_files(&locale_files);
 
     let mut output = TokenStream::new();
-
-    let locale_files = find_locale_files(input);
-
-    let translations = build_translations_from_files(&locale_files);
-
-    let locales = build_locale_names_from_files(&locale_files);
     gen_code(locales, translations, &mut output);
 
     if env::var("I18N_CODE_GEN_DEBUG").ok() == Some("1".to_string()) {
@@ -31,6 +28,18 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     }
 
     output.into()
+}
+
+#[derive(Debug)]
+struct Input {
+    filename: String,
+}
+
+impl Parse for Input {
+    fn parse(input: ParseStream) -> parse::Result<Self> {
+        let filename = input.parse::<syn::LitStr>()?.value();
+        Ok(Input { filename })
+    }
 }
 
 type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)>>;
