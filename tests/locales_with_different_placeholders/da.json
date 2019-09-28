@@ -1,0 +1,3 @@
+{
+    "greeting_different_placeholder": "Hej %{percent_placeholder}"
+}

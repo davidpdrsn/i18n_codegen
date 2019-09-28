@@ -17,18 +17,25 @@ use std::{
     env,
     path::{Path, PathBuf},
 };
-use syn::parse::{self, Parse, ParseStream};
+use syn::{
+    parse::{self, Parse, ParseStream},
+    Token,
+};
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = match syn::parse::<Input>(input) {
+        Ok(input) => input,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
     match try_i18n(input) {
         Ok(tokens) => tokens,
         Err(err) => panic!("{}", err),
     }
 }
 
-fn try_i18n(input: proc_macro::TokenStream) -> Result<proc_macro::TokenStream> {
-    let input = syn::parse::<Input>(input)?;
+fn try_i18n(input: Input) -> Result<proc_macro::TokenStream> {
     let file_paths = find_locale_files(&input.filename)?;
 
     let paths_and_contents = file_paths
@@ -39,7 +46,7 @@ fn try_i18n(input: proc_macro::TokenStream) -> Result<proc_macro::TokenStream> {
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let translations = build_translations_from_files(&paths_and_contents)?;
+    let translations = build_translations_from_files(&paths_and_contents, &input.config)?;
     let locales = build_locale_names_from_files(&file_paths)?;
 
     let mut output = TokenStream::new();
@@ -55,12 +62,57 @@ fn try_i18n(input: proc_macro::TokenStream) -> Result<proc_macro::TokenStream> {
 #[derive(Debug)]
 struct Input {
     filename: String,
+    config: Config,
 }
 
 impl Parse for Input {
     fn parse(input: ParseStream) -> parse::Result<Self> {
         let filename = input.parse::<syn::LitStr>()?.value();
-        Ok(Input { filename })
+
+        let config = if input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+
+            let open_ident = input.parse::<syn::Ident>()?;
+            if open_ident != "open" {
+                return Err(syn::Error::new(open_ident.span(), "expected `open`"));
+            }
+
+            input.parse::<Token![:]>()?;
+            let open = input.parse::<syn::LitStr>()?.value();
+            input.parse::<Token![,]>()?;
+
+            let close_ident = input.parse::<syn::Ident>()?;
+            if close_ident != "close" {
+                return Err(syn::Error::new(close_ident.span(), "expected `close`"));
+            }
+            input.parse::<Token![:]>()?;
+            let close = input.parse::<syn::LitStr>()?.value();
+
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+
+            Config { open, close }
+        } else {
+            Config::default()
+        };
+
+        Ok(Input { filename, config })
+    }
+}
+
+#[derive(Debug)]
+struct Config {
+    open: String,
+    close: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            open: "{".to_string(),
+            close: "}".to_string(),
+        }
     }
 }
 
@@ -85,7 +137,11 @@ struct I18nKey {
     placeholders: Placeholders,
 }
 
-fn gen_code(locales: Vec<LocaleName>, translations: Translations, out: &mut TokenStream) {
+fn gen_code(
+    locales: Vec<LocaleName>,
+    translations: Translations,
+    out: &mut TokenStream,
+) {
     gen_locale_enum(locales, out);
     gen_i18n_struct(translations, out);
 }
@@ -105,61 +161,70 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
 fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
     let mut all_unique_placeholders = HashSet::<Ident>::new();
 
-    let methods = translations.iter().map(|(key, translations)| {
-        let name = ident(&key.0);
+    let methods = translations
+        .iter()
+        .map(|(key, translations)| {
+            let name = ident(&key.0);
 
-        let mut placeholders = translations
-            .iter()
-            .flat_map(|(_, (_, placeholders))| placeholders.0.iter().map(|p| ident(p)))
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        placeholders.sort();
+            let mut placeholders = translations
+                .iter()
+                .flat_map(|(_, (_, placeholders))| placeholders.0.iter().map(|p| ident(p)))
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+            placeholders.sort();
 
-        for placeholder in &placeholders {
-            all_unique_placeholders.insert(placeholder.clone());
-        }
+            for placeholder in &placeholders {
+                all_unique_placeholders.insert(placeholder.clone());
+            }
 
-        let args = placeholders.iter().map(|placeholder| {
-            let type_name = ident(&placeholder.to_string().to_camel_case());
-            quote! { #placeholder: #type_name<'_> }
-        });
+            let args = placeholders.iter().map(|placeholder| {
+                let type_name = ident(&placeholder.to_string().to_camel_case());
+                quote! { #placeholder: #type_name<'_> }
+            });
 
-        let match_arms = translations.iter().map(|(locale_name, (translation, _))| {
-            let locale_name = ident(&locale_name.0);
-            let translation = translation.0.to_string();
+            let match_arms = translations.iter().map(|(locale_name, (translation, _))| {
+                let locale_name = ident(&locale_name.0);
+                let translation = translation.0.to_string();
 
-            let body = if placeholders.is_empty() {
-                quote! { format!(#translation) }
-            } else {
-                let fields = placeholders.iter().filter_map(|placeholder| {
-                    let mut format_key = placeholder.to_string();
-                    format_key.truncate(format_key.len() - 1);
+                let body = if placeholders.is_empty() {
+                    quote! { format!(#translation) }
+                } else {
+                    let fields = placeholders.iter().filter_map(|placeholder| {
+                        let mut format_key = placeholder.to_string();
+                        format_key.truncate(format_key.len() - 1);
 
-                    if translation.contains(&format!("{{{}}}", format_key)) {
-                        let format_key = ident(&format_key);
-                        Some(quote! { #format_key = #placeholder.0 })
-                    } else {
-                        None
-                    }
-                });
-                quote! { format!(#translation, #(#fields),*) }
-            };
+                        let placehoder_with_open_close = format!(
+                            "{open}{placeholder}{close}",
+                            open = "{",
+                            placeholder = format_key,
+                            close = "}",
+                        );
+                        if translation.contains(&placehoder_with_open_close) {
+                            let format_key = ident(&format_key);
+                            Some(quote! { #format_key = #placeholder.0 })
+                        } else {
+                            None
+                        }
+                    });
+                    quote! { format!(#translation, #(#fields),*) }
+                };
+
+                quote! {
+                    Locale::#locale_name => #body
+                }
+            });
 
             quote! {
-                Locale::#locale_name => #body
-            }
-        });
-
-        quote! {
-            #[allow(missing_docs)]
-            pub fn #name(self, #(#args),*) -> String {
-                match self {
-                    #(#match_arms),*
+                #[allow(missing_docs)]
+                pub fn #name(self, #(#args),*) -> String {
+                    match self {
+                        #(#match_arms),*
+                    }
                 }
             }
-        }
-    }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     let placeholder_newtypes = all_unique_placeholders.into_iter().map(|placeholder| {
         let placeholder = ident(&placeholder.to_string().to_camel_case());
@@ -184,6 +249,7 @@ fn ident(name: &str) -> Ident {
 
 fn build_translations_from_files(
     paths_and_contents: &[(&PathBuf, String)],
+    config: &Config,
 ) -> Result<Translations> {
     let keys_per_locale = paths_and_contents
         .iter()
@@ -191,7 +257,7 @@ fn build_translations_from_files(
             let locale_name = locale_name_from_translations_file_path(&path)?;
 
             let map = parse_translations_file(&contents)?;
-            let keys_in_file = build_keys_from_json(map)?;
+            let keys_in_file = build_keys_from_json(map, config)?;
 
             let locale_and_keys = keys_in_file
                 .into_iter()
@@ -263,10 +329,11 @@ fn parse_translations_file(contents: &str) -> Result<HashMap<&str, String>> {
     serde_json::from_str(&contents).map_err(From::from)
 }
 
-fn build_keys_from_json(map: HashMap<&str, String>) -> Result<Vec<I18nKey>> {
+fn build_keys_from_json(map: HashMap<&str, String>, config: &Config) -> Result<Vec<I18nKey>> {
     map.into_par_iter()
         .map(|(key, value)| {
-            let placeholders = find_placeholders(&value, "{", "}")?;
+            let placeholders = find_placeholders(&value, &config.open, &config.close)?;
+            let value = value.replace(&config.open, "{").replace(&config.close, "}");
 
             Ok(I18nKey {
                 key: Key(key.replace(".", "_")),
@@ -319,7 +386,7 @@ mod test {
 
         let contents = std::fs::read_to_string(&locale_path).unwrap();
         let map = parse_translations_file(&contents).unwrap();
-        let mut keys = build_keys_from_json(map).unwrap();
+        let mut keys = build_keys_from_json(map, &Config::default()).unwrap();
         keys.sort_by_key(|key| key.key.0.clone());
 
         assert_eq!(keys[0].key.0, "duplicate_placeholders");
@@ -351,7 +418,8 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        let translations = build_translations_from_files(&paths_and_contents).unwrap();
+        let translations =
+            build_translations_from_files(&paths_and_contents, &Config::default()).unwrap();
 
         assert_eq!(
             (translations[&Key("greeting".to_string())][&LocaleName("En".to_string())].0).0,
