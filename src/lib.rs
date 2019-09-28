@@ -1,4 +1,4 @@
-// #![deny(unused_imports, dead_code, unused_variables)]
+#![deny(unused_imports, dead_code, unused_variables)]
 
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -11,6 +11,7 @@ use heck::CamelCase;
 use placeholder_parsing::find_placeholders;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -102,10 +103,9 @@ fn gen_locale_enum(locales: Vec<LocaleName>, out: &mut TokenStream) {
 }
 
 fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
-    let mut methods = vec![];
     let mut all_unique_placeholders = HashSet::<Ident>::new();
 
-    for (key, translations) in translations {
+    let methods = translations.iter().map(|(key, translations)| {
         let name = ident(&key.0);
 
         let mut placeholders = translations
@@ -151,15 +151,15 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
             }
         });
 
-        methods.push(quote! {
+        quote! {
             #[allow(missing_docs)]
             pub fn #name(self, #(#args),*) -> String {
                 match self {
                     #(#match_arms),*
                 }
             }
-        });
-    }
+        }
+    }).collect::<Vec<_>>();
 
     let placeholder_newtypes = all_unique_placeholders.into_iter().map(|placeholder| {
         let placeholder = ident(&placeholder.to_string().to_camel_case());
@@ -199,18 +199,21 @@ fn build_translations_from_files(
                 .collect::<Vec<(LocaleName, I18nKey)>>();
             Ok(locale_and_keys)
         })
-        .collect::<Result<Vec<Vec<(LocaleName, I18nKey)>>, Error>>()?;
-    let keys_per_locale = keys_per_locale.into_iter().flatten().collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, Error>>()?;
 
     let keys_per_locale: HashMap<(LocaleName, Key), (Translation, Placeholders)> = keys_per_locale
         .into_iter()
+        .flatten()
         .map(|(locale, key)| ((locale, key.key), (key.translation, key.placeholders)))
         .collect();
 
-    let mut acc: Translations = HashMap::new();
+    let number_of_keys_per_locale = keys_per_locale.len() / paths_and_contents.len();
+    let mut acc: Translations = HashMap::with_capacity(number_of_keys_per_locale);
 
     for ((locale_name, key), (translation, placeholders)) in keys_per_locale {
-        let entry = acc.entry(key).or_insert_with(HashMap::new);
+        let entry = acc
+            .entry(key)
+            .or_insert_with(|| HashMap::with_capacity(paths_and_contents.len()));
         entry.insert(locale_name, (translation, placeholders));
     }
 
@@ -261,7 +264,7 @@ fn parse_translations_file(contents: &str) -> Result<HashMap<&str, String>> {
 }
 
 fn build_keys_from_json(map: HashMap<&str, String>) -> Result<Vec<I18nKey>> {
-    map.into_iter()
+    map.into_par_iter()
         .map(|(key, value)| {
             let placeholders = find_placeholders(&value, "{", "}")?;
 
