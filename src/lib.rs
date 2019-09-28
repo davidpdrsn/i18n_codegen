@@ -191,7 +191,7 @@ fn build_translations_from_files(
             let locale_name = locale_name_from_translations_file_path(&path)?;
 
             let map = parse_translations_file(&contents)?;
-            let keys_in_file = build_keys_from_json(map);
+            let keys_in_file = build_keys_from_json(map)?;
 
             let locale_and_keys = keys_in_file
                 .into_iter()
@@ -260,16 +260,16 @@ fn parse_translations_file(contents: &str) -> Result<HashMap<&str, String>> {
     serde_json::from_str(&contents).map_err(From::from)
 }
 
-fn build_keys_from_json(map: HashMap<&str, String>) -> Vec<I18nKey> {
+fn build_keys_from_json(map: HashMap<&str, String>) -> Result<Vec<I18nKey>> {
     map.into_iter()
         .map(|(key, value)| {
-            let placeholders = find_placeholders(&value, "{", "}");
+            let placeholders = find_placeholders(&value, "{", "}")?;
 
-            I18nKey {
+            Ok(I18nKey {
                 key: Key(key.replace(".", "_")),
                 translation: Translation(value),
                 placeholders: Placeholders(placeholders),
-            }
+            })
         })
         .collect()
 }
@@ -316,7 +316,7 @@ mod test {
 
         let contents = std::fs::read_to_string(&locale_path).unwrap();
         let map = parse_translations_file(&contents).unwrap();
-        let mut keys = build_keys_from_json(map);
+        let mut keys = build_keys_from_json(map).unwrap();
         keys.sort_by_key(|key| key.key.0.clone());
 
         assert_eq!(keys[0].key.0, "duplicate_placeholders");

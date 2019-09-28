@@ -14,6 +14,7 @@ pub enum Error {
     DirectoryInLocalesFolder,
     NoFileStem,
     InvalidUtf8InFileName,
+    UnbalancedPlaceholders,
 }
 
 impl std::error::Error for Error {}
@@ -35,6 +36,9 @@ impl fmt::Display for Error {
             }
             Error::InvalidUtf8InFileName => {
                 write!(f, "File name contained invalid UTF-8")
+            }
+            Error::UnbalancedPlaceholders => {
+                write!(f, "Unbalanced placeholders in string")
             }
         }
     }

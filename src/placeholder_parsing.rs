@@ -1,10 +1,10 @@
+use crate::error::{Error, Result};
 use std::collections::HashSet;
 
-pub fn find_placeholders(s: &str, start: &str, end: &str) -> HashSet<String> {
-    // TODO: Handle invalid input with unbalanced braces
+pub fn find_placeholders(s: &str, start: &str, end: &str) -> Result<HashSet<String>> {
     // TODO: Escaping of {}
 
-    let tokens = tokenize(s, start, end);
+    let tokens = tokenize(s, start, end)?;
 
     let mut acc = HashSet::new();
 
@@ -27,7 +27,7 @@ pub fn find_placeholders(s: &str, start: &str, end: &str) -> HashSet<String> {
         }
     }
 
-    acc
+    Ok(acc)
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -56,14 +56,14 @@ impl<'a> Token<'a> {
 
     fn token(&self) -> &str {
         match self {
-            Token::PlaceholderStart => unimplemented!("token start"),
-            Token::PlaceholderEnd => unimplemented!("token end"),
+            Token::PlaceholderStart => panic!("token start"),
+            Token::PlaceholderEnd => panic!("token end"),
             Token::Char(token) => token,
         }
     }
 }
 
-fn tokenize<'a>(s: &'a str, start: &str, end: &str) -> Vec<Token<'a>> {
+fn tokenize<'a>(s: &'a str, start: &str, end: &str) -> Result<Vec<Token<'a>>> {
     let mut tokens = vec![];
     let mut idx = 0;
     let start = split_into_slices(start);
@@ -98,7 +98,24 @@ fn tokenize<'a>(s: &'a str, start: &str, end: &str) -> Vec<Token<'a>> {
         idx += 1;
     }
 
-    tokens
+    if balanced(&tokens) {
+        Ok(tokens)
+    } else {
+        Err(Error::UnbalancedPlaceholders)
+    }
+}
+
+fn balanced(tokens: &[Token]) -> bool {
+    let mut start_count = 0;
+    let mut end_count = 0;
+    for token in tokens.iter() {
+        if token.is_start() {
+            start_count += 1;
+        } else if token.is_end() {
+            end_count += 1;
+        }
+    }
+    start_count == end_count
 }
 
 fn split_into_slices(s: &str) -> Vec<&str> {
@@ -129,13 +146,13 @@ mod test {
 
     #[test]
     fn test_tokenize_empty_input() {
-        assert_eq!(tokenize("", "{", "}"), vec![]);
+        assert_eq!(tokenize("", "{", "}").unwrap(), vec![]);
     }
 
     #[test]
     fn test_tokenize_without_placeholders() {
         assert_eq!(
-            tokenize("123", "{", "}"),
+            tokenize("123", "{", "}").unwrap(),
             vec![Token::Char("1"), Token::Char("2"), Token::Char("3"),]
         );
     }
@@ -143,7 +160,7 @@ mod test {
     #[test]
     fn test_tokenize_with_simple_placeholders() {
         assert_eq!(
-            tokenize("{bob}", "{", "}"),
+            tokenize("{bob}", "{", "}").unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -157,7 +174,7 @@ mod test {
     #[test]
     fn test_tokenize_with_multi_char_placeholders() {
         assert_eq!(
-            tokenize("[{bob}]", "[{", "}]"),
+            tokenize("[{bob}]", "[{", "}]").unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -171,7 +188,7 @@ mod test {
     #[test]
     fn test_tokenize_with_different_length_char_placeholders() {
         assert_eq!(
-            tokenize("%{bob}", "%{", "}"),
+            tokenize("%{bob}", "%{", "}").unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -185,7 +202,7 @@ mod test {
     #[test]
     fn test_tokenize_with_emojis() {
         assert_eq!(
-            tokenize("%{bob} 😅", "%{", "}"),
+            tokenize("%{bob} 😅", "%{", "}").unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -199,18 +216,26 @@ mod test {
     }
 
     #[test]
+    fn error_when_unbalanced() {
+        match tokenize("%{bob", "%{", "}") {
+            Err(Error::UnbalancedPlaceholders) => {},
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
     fn test_parsing_placeholders() {
         assert_eq!(
-            find_placeholders("Hello", "{", "}"),
+            find_placeholders("Hello", "{", "}").unwrap(),
             HashSet::<String>::new()
         );
         assert_eq!(
-            find_placeholders("Hello {name}", "{", "}"),
+            find_placeholders("Hello {name}", "{", "}").unwrap(),
             hashset!["name_".to_string()]
         );
 
         assert_eq!(
-            find_placeholders("{greeting} {name}", "{", "}"),
+            find_placeholders("{greeting} {name}", "{", "}").unwrap(),
             hashset!["greeting_".to_string(), "name_".to_string()],
         );
     }
