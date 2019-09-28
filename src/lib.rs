@@ -1,10 +1,12 @@
-#![deny(unused_imports, dead_code, unused_variables)]
+// #![deny(unused_imports, dead_code, unused_variables)]
 
 extern crate proc_macro;
 extern crate proc_macro2;
 
+mod error;
 mod placeholder_parsing;
 
+use error::{Error, Result};
 use heck::CamelCase;
 use placeholder_parsing::find_placeholders;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -18,19 +20,26 @@ use syn::parse::{self, Parse, ParseStream};
 
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = syn::parse::<Input>(input).unwrap_or_else(|e| panic!("{}", e));
-    let file_paths = find_locale_files(&input.filename);
+    match try_i18n(input) {
+        Ok(tokens) => tokens,
+        Err(err) => panic!("{}", err),
+    }
+}
+
+fn try_i18n(input: proc_macro::TokenStream) -> Result<proc_macro::TokenStream> {
+    let input = syn::parse::<Input>(input)?;
+    let file_paths = find_locale_files(&input.filename)?;
 
     let paths_and_contents = file_paths
         .iter()
         .map(|path| {
-            let contents = std::fs::read_to_string(path).expect("read file");
-            (path, contents)
+            let contents = std::fs::read_to_string(path)?;
+            Ok((path, contents))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, Error>>()?;
 
-    let translations = build_translations_from_files(&paths_and_contents);
-    let locales = build_locale_names_from_files(&file_paths);
+    let translations = build_translations_from_files(&paths_and_contents)?;
+    let locales = build_locale_names_from_files(&file_paths)?;
 
     let mut output = TokenStream::new();
     gen_code(locales, translations, &mut output);
@@ -39,7 +48,7 @@ pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         println!("{}", output);
     }
 
-    output.into()
+    Ok(output.into())
 }
 
 #[derive(Debug)]
@@ -173,19 +182,25 @@ fn ident(name: &str) -> Ident {
     Ident::new(name, Span::call_site())
 }
 
-fn build_translations_from_files(paths_and_contents: &[(&PathBuf, String)]) -> Translations {
-    let keys_per_locale: Vec<(LocaleName, I18nKey)> = paths_and_contents
+fn build_translations_from_files(
+    paths_and_contents: &[(&PathBuf, String)],
+) -> Result<Translations> {
+    let keys_per_locale = paths_and_contents
         .iter()
-        .flat_map(|(path, contents)| {
-            let locale_name = locale_name_from_translations_file_path(&path);
-            let keys_in_file = build_keys_from_json(parse_translations_file(&contents));
+        .map(|(path, contents)| {
+            let locale_name = locale_name_from_translations_file_path(&path)?;
 
-            keys_in_file
+            let map = parse_translations_file(&contents)?;
+            let keys_in_file = build_keys_from_json(map);
+
+            let locale_and_keys = keys_in_file
                 .into_iter()
                 .map(|key| (locale_name.clone(), key))
-                .collect::<Vec<(LocaleName, I18nKey)>>()
+                .collect::<Vec<(LocaleName, I18nKey)>>();
+            Ok(locale_and_keys)
         })
-        .collect();
+        .collect::<Result<Vec<Vec<(LocaleName, I18nKey)>>, Error>>()?;
+    let keys_per_locale = keys_per_locale.into_iter().flatten().collect::<Vec<_>>();
 
     let keys_per_locale: HashMap<(LocaleName, Key), (Translation, Placeholders)> = keys_per_locale
         .into_iter()
@@ -199,45 +214,50 @@ fn build_translations_from_files(paths_and_contents: &[(&PathBuf, String)]) -> T
         entry.insert(locale_name, (translation, placeholders));
     }
 
-    acc
+    Ok(acc)
 }
 
-fn build_locale_names_from_files(file_paths: &[PathBuf]) -> Vec<LocaleName> {
+fn build_locale_names_from_files(file_paths: &[PathBuf]) -> Result<Vec<LocaleName>> {
     file_paths
         .iter()
         .map(|file_path| locale_name_from_translations_file_path(&file_path))
         .collect()
 }
 
-fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Vec<PathBuf> {
+const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
+
+fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Result<Vec<PathBuf>> {
     let cargo_dir =
-        std::env::var("CARGO_MANIFEST_DIR").expect("Env var `CARGO_MANIFEST_DIR` was missing");
+        std::env::var(CARGO_MANIFEST_DIR).map_err(Error::missing_env_var(CARGO_MANIFEST_DIR))?;
+
     let pwd = PathBuf::from(cargo_dir);
     let full_locales_path = pwd.join(locales_path);
 
-    std::fs::read_dir(full_locales_path)
-        .expect("read dir")
+    let paths = std::fs::read_dir(full_locales_path)?
         .map(|entry| {
-            let entry = entry.expect("entry");
+            let entry = entry?;
             let path = entry.path();
 
             if path.is_dir() {
-                // TODO: Skip directory and just emit warning
-                panic!("Directories not allowed")
+                Err(Error::DirectoryInLocalesFolder)
             } else {
-                path
+                Ok(path)
             }
         })
-        .filter(|path| {
-            path.extension()
+        .filter(|path| match path {
+            Ok(path) => path
+                .extension()
                 .map(|ext| ext == "json")
-                .unwrap_or_else(|| false)
+                .unwrap_or_else(|| false),
+            // don't throw errors away
+            Err(_) => true,
         })
-        .collect()
+        .collect::<Result<_, Error>>()?;
+    Ok(paths)
 }
 
-fn parse_translations_file(contents: &str) -> HashMap<&str, String> {
-    serde_json::from_str(&contents).unwrap_or_else(|e| panic!("Error parsing json file: {}", e))
+fn parse_translations_file(contents: &str) -> Result<HashMap<&str, String>> {
+    serde_json::from_str(&contents).map_err(From::from)
 }
 
 fn build_keys_from_json(map: HashMap<&str, String>) -> Vec<I18nKey> {
@@ -254,14 +274,14 @@ fn build_keys_from_json(map: HashMap<&str, String>) -> Vec<I18nKey> {
         .collect()
 }
 
-fn locale_name_from_translations_file_path(path: &PathBuf) -> LocaleName {
+fn locale_name_from_translations_file_path(path: &PathBuf) -> Result<LocaleName> {
     let file_stem = path
         .file_stem()
-        .expect("file stem")
+        .ok_or_else(|| Error::NoFileStem)?
         .to_str()
-        .expect("file to string");
+        .ok_or_else(|| Error::InvalidUtf8InFileName)?;
     let name = uppercase_first_letter(file_stem);
-    LocaleName(name)
+    Ok(LocaleName(name))
 }
 
 fn uppercase_first_letter(s: &str) -> String {
@@ -281,7 +301,7 @@ mod test {
     fn test_find_locale_files() {
         let input = "tests/locales";
 
-        let locale_files = find_locale_files(input);
+        let locale_files = find_locale_files(input).unwrap();
 
         assert_eq!(locale_files.len(), 2);
         assert!(locale_files[0].to_str().unwrap().contains("en.json"));
@@ -295,7 +315,7 @@ mod test {
         let locale_path = crate_root_path.join(input).join(PathBuf::from("en.json"));
 
         let contents = std::fs::read_to_string(&locale_path).unwrap();
-        let map = parse_translations_file(&contents);
+        let map = parse_translations_file(&contents).unwrap();
         let mut keys = build_keys_from_json(map);
         keys.sort_by_key(|key| key.key.0.clone());
 
@@ -310,7 +330,7 @@ mod test {
         let crate_root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
         let locale_path = crate_root_path.join(input).join(PathBuf::from("en.json"));
 
-        let locale_name = locale_name_from_translations_file_path(&locale_path);
+        let locale_name = locale_name_from_translations_file_path(&locale_path).unwrap();
 
         assert_eq!(locale_name.0, "En");
     }
@@ -318,7 +338,7 @@ mod test {
     #[test]
     fn test_building_translations() {
         let input = "tests/locales";
-        let locale_files = find_locale_files(input);
+        let locale_files = find_locale_files(input).unwrap();
 
         let paths_and_contents = locale_files
             .iter()
@@ -328,7 +348,7 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        let translations = build_translations_from_files(&paths_and_contents);
+        let translations = build_translations_from_files(&paths_and_contents).unwrap();
 
         assert_eq!(
             (translations[&Key("greeting".to_string())][&LocaleName("En".to_string())].0).0,

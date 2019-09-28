@@ -214,5 +214,4 @@ mod test {
             hashset!["greeting_".to_string(), "name_".to_string()],
         );
     }
-
 }
