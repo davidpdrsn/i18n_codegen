@@ -82,6 +82,9 @@
 //!
 //! It expects all the JSON keys to be lowercase and will replace `-` and `_` with `.`
 //!
+//! You can set the environment variable `I18N_CODE_GEN_DEBUG` to `1` to have the generated code
+//! printed during compilation. For example: `I18N_CODE_GEN_DEBUG=1 cargo build`.
+//!
 //! ## Customizing placeholders
 //!
 //! By default it will assume you use `{` and `}` for placeholders such as `"Hello {name}"`. That can be
