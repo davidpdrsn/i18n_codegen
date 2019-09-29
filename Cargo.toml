@@ -5,15 +5,15 @@ authors = ["David Pedersen <david.pdrsn@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-syn = { version = "0.15.22", features = ["full"] }
+syn = "0.15.22"
 quote = "0.6.10"
 proc-macro2 = "0.4.24"
 serde_json = "1.0.38"
-regex = "1.1.0"
-lazy_static = "1.2.0"
 heck = "0.3.1"
-itertools = "0.8.0"
 rayon = "1.2.0"
+
+[dev_dependencies]
+trybuild = "1.0.14"
 
 [lib]
 proc-macro = true

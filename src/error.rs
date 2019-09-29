@@ -1,5 +1,5 @@
-use std::fmt;
-use crate::LocaleName;
+use crate::{Key, LocaleName};
+use std::{collections::HashSet, fmt};
 
 pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -15,7 +15,17 @@ pub(crate) enum Error {
     DirectoryInLocalesFolder,
     NoFileStem,
     InvalidUtf8InFileName,
-    UnbalancedPlaceholders { locale_name: LocaleName, string: String },
+    UnbalancedPlaceholders {
+        locale_name: LocaleName,
+        string: String,
+    },
+    MissingKeysInLocale(Vec<MissingKeysInLocale>),
+}
+
+#[derive(Debug)]
+pub(crate) struct MissingKeysInLocale {
+    pub(crate) locale_name: LocaleName,
+    pub(crate) keys: HashSet<Key>,
 }
 
 impl std::error::Error for Error {}
@@ -32,16 +42,29 @@ impl fmt::Display for Error {
             Error::DirectoryInLocalesFolder => {
                 write!(f, "The locales directory should not contain other folders")
             }
-            Error::NoFileStem => {
-                write!(f, "Failed to get file stem of locale file")
-            }
-            Error::InvalidUtf8InFileName => {
-                write!(f, "File name contained invalid UTF-8")
-            }
-            Error::UnbalancedPlaceholders { locale_name, string } => {
+            Error::NoFileStem => write!(f, "Failed to get file stem of locale file"),
+            Error::InvalidUtf8InFileName => write!(f, "File name contained invalid UTF-8"),
+            Error::UnbalancedPlaceholders {
+                locale_name,
+                string,
+            } => {
                 writeln!(f, "Unbalanced placeholders in string")?;
                 writeln!(f, "Locale: {}", locale_name.0)?;
                 write!(f, "String: {:?}", string)?;
+                Ok(())
+            }
+            Error::MissingKeysInLocale(errors) => {
+                let mut errors = errors.iter().collect::<Vec<_>>();
+                errors.sort_by_key(|error| &error.locale_name.0);
+
+                writeln!(f, "Some locales are missing keys")?;
+                for error in errors {
+                    writeln!(f, "`{}` is missing:", error.locale_name.0)?;
+                    for key in &error.keys {
+                        writeln!(f, "  `{}`", key.0)?;
+                    }
+                    writeln!(f)?;
+                }
                 Ok(())
             }
         }

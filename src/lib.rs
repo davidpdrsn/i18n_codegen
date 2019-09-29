@@ -111,7 +111,7 @@ extern crate proc_macro2;
 mod error;
 mod placeholder_parsing;
 
-use error::{Error, Result};
+use error::{Error, MissingKeysInLocale, Result};
 use heck::CamelCase;
 use placeholder_parsing::find_placeholders;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -153,6 +153,7 @@ fn try_i18n(input: Input) -> Result<proc_macro::TokenStream> {
         .collect::<Result<Vec<_>, Error>>()?;
 
     let translations = build_translations_from_files(&paths_and_contents, &input.config)?;
+    validate_translations(&translations)?;
     let locales = build_locale_names_from_files(&file_paths)?;
 
     let mut output = TokenStream::new();
@@ -402,6 +403,50 @@ fn build_locale_names_from_files(file_paths: &[PathBuf]) -> Result<Vec<LocaleNam
         .collect()
 }
 
+fn validate_translations(translations: &Translations) -> Result<()> {
+    let all_keys = all_keys(translations);
+    let keys_per_locale = keys_per_locale(translations);
+
+    let mut errors = Vec::new();
+    for (locale_name, keys) in keys_per_locale {
+        let keys_missing = all_keys.difference(&keys).collect::<HashSet<_>>();
+        if !keys_missing.is_empty() {
+            let keys = keys_missing.iter().map(|key| (**key).clone()).collect();
+
+            errors.push(MissingKeysInLocale {
+                locale_name: locale_name.clone(),
+                keys,
+            });
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::MissingKeysInLocale(errors))
+    }
+}
+
+fn all_keys<'a>(translations: &'a Translations) -> HashSet<&'a Key> {
+    translations.keys().collect()
+}
+
+fn keys_per_locale<'a>(
+    translations: &'a Translations,
+) -> HashMap<&'a LocaleName, HashSet<&'a Key>> {
+    let mut acc = HashMap::new();
+
+    for (key, translations_for_key) in translations {
+        for (locale_name, (_translation, _placeholders)) in translations_for_key {
+            acc.entry(locale_name)
+                .or_insert_with(HashSet::new)
+                .insert(key);
+        }
+    }
+
+    acc
+}
+
 const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Result<Vec<PathBuf>> {
@@ -540,6 +585,12 @@ mod test {
             (translations[&Key("greeting".to_string())][&LocaleName("En".to_string())].0).0,
             "Hello {name}",
         );
+    }
+
+    #[test]
+    fn ui() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/compile_fail/*.rs");
     }
 
     fn to_vec<T: std::hash::Hash + Eq>(set: HashSet<T>) -> Vec<T> {
