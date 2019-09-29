@@ -10,8 +10,6 @@ pub(crate) fn find_placeholders(
     end: &str,
     locale_name: &LocaleName,
 ) -> Result<HashSet<String>> {
-    // TODO: Escaping of {}
-
     let tokens = tokenize(s, start, end, locale_name)?;
 
     let mut acc = HashSet::new();

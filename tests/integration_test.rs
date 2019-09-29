@@ -1,7 +1,5 @@
 i18n_codegen::i18n!("tests/locales");
 
-// TODO: error when strings are missing in some languages
-
 #[test]
 fn it_works() {
     assert_eq!("Hello, World!", Locale::En.hello());
