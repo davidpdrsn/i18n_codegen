@@ -80,7 +80,7 @@
 //! }
 //! ```
 //!
-//! It expects all the JSON keys to be lowercase and will replace `-` and `_` with `.`
+//! It expects all the JSON keys to be lowercase and will replace `-` and `.` with `_`.
 //!
 //! You can set the environment variable `I18N_CODE_GEN_DEBUG` to `1` to have the generated code
 //! printed during compilation. For example: `I18N_CODE_GEN_DEBUG=1 cargo build`.
