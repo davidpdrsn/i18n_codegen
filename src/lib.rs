@@ -103,7 +103,15 @@
 //!
 //! There is currently no support for escaping placeholders.
 
-#![deny(unused_imports, dead_code, unused_variables)]
+#![deny(
+    unused_imports,
+    dead_code,
+    unused_variables,
+    unknown_lints,
+    missing_docs,
+    unused_must_use
+)]
+#![doc(html_root_url = "https://docs.rs/i18n_codegen/0.1.0")]
 
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -591,6 +599,11 @@ mod test {
     fn ui() {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*.rs");
+    }
+
+    #[test]
+    fn test_html_root_url() {
+        version_sync::assert_html_root_url_updated!("src/lib.rs");
     }
 
     fn to_vec<T: std::hash::Hash + Eq>(set: HashSet<T>) -> Vec<T> {
