@@ -1,9 +1,10 @@
 use std::fmt;
+use crate::LocaleName;
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug)]
-pub enum Error {
+pub(crate) enum Error {
     JsonParsing(serde_json::error::Error),
     ProcMacroInput(syn::Error),
     Io(std::io::Error),
@@ -14,7 +15,7 @@ pub enum Error {
     DirectoryInLocalesFolder,
     NoFileStem,
     InvalidUtf8InFileName,
-    UnbalancedPlaceholders,
+    UnbalancedPlaceholders { locale_name: LocaleName, string: String },
 }
 
 impl std::error::Error for Error {}
@@ -37,8 +38,11 @@ impl fmt::Display for Error {
             Error::InvalidUtf8InFileName => {
                 write!(f, "File name contained invalid UTF-8")
             }
-            Error::UnbalancedPlaceholders => {
-                write!(f, "Unbalanced placeholders in string")
+            Error::UnbalancedPlaceholders { locale_name, string } => {
+                writeln!(f, "Unbalanced placeholders in string")?;
+                writeln!(f, "Locale: {}", locale_name.0)?;
+                write!(f, "String: {:?}", string)?;
+                Ok(())
             }
         }
     }

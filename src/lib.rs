@@ -121,6 +121,13 @@ type Translations = HashMap<Key, HashMap<LocaleName, (Translation, Placeholders)
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct LocaleName(String);
 
+impl LocaleName {
+    #[cfg(test)]
+    fn new<T: Into<String>>(t: T) -> LocaleName {
+        LocaleName(t.into())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct Key(String);
 
@@ -137,11 +144,7 @@ struct I18nKey {
     placeholders: Placeholders,
 }
 
-fn gen_code(
-    locales: Vec<LocaleName>,
-    translations: Translations,
-    out: &mut TokenStream,
-) {
+fn gen_code(locales: Vec<LocaleName>, translations: Translations, out: &mut TokenStream) {
     gen_locale_enum(locales, out);
     gen_i18n_struct(translations, out);
 }
@@ -257,7 +260,7 @@ fn build_translations_from_files(
             let locale_name = locale_name_from_translations_file_path(&path)?;
 
             let map = parse_translations_file(&contents)?;
-            let keys_in_file = build_keys_from_json(map, config)?;
+            let keys_in_file = build_keys_from_json(map, config, &locale_name)?;
 
             let locale_and_keys = keys_in_file
                 .into_iter()
@@ -329,10 +332,14 @@ fn parse_translations_file(contents: &str) -> Result<HashMap<&str, String>> {
     serde_json::from_str(&contents).map_err(From::from)
 }
 
-fn build_keys_from_json(map: HashMap<&str, String>, config: &Config) -> Result<Vec<I18nKey>> {
+fn build_keys_from_json(
+    map: HashMap<&str, String>,
+    config: &Config,
+    locale_name: &LocaleName,
+) -> Result<Vec<I18nKey>> {
     map.into_par_iter()
         .map(|(key, value)| {
-            let placeholders = find_placeholders(&value, &config.open, &config.close)?;
+            let placeholders = find_placeholders(&value, &config.open, &config.close, locale_name)?;
             let value = value.replace(&config.open, "{").replace(&config.close, "}");
 
             Ok(I18nKey {
@@ -386,7 +393,8 @@ mod test {
 
         let contents = std::fs::read_to_string(&locale_path).unwrap();
         let map = parse_translations_file(&contents).unwrap();
-        let mut keys = build_keys_from_json(map, &Config::default()).unwrap();
+        let mut keys =
+            build_keys_from_json(map, &Config::default(), &LocaleName::new("test")).unwrap();
         keys.sort_by_key(|key| key.key.0.clone());
 
         assert_eq!(keys[0].key.0, "duplicate_placeholders");

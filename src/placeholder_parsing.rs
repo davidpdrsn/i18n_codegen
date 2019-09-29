@@ -1,10 +1,18 @@
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    LocaleName,
+};
 use std::collections::HashSet;
 
-pub fn find_placeholders(s: &str, start: &str, end: &str) -> Result<HashSet<String>> {
+pub(crate) fn find_placeholders(
+    s: &str,
+    start: &str,
+    end: &str,
+    locale_name: &LocaleName,
+) -> Result<HashSet<String>> {
     // TODO: Escaping of {}
 
-    let tokens = tokenize(s, start, end)?;
+    let tokens = tokenize(s, start, end, locale_name)?;
 
     let mut acc = HashSet::new();
 
@@ -63,12 +71,17 @@ impl<'a> Token<'a> {
     }
 }
 
-fn tokenize<'a>(s: &'a str, start: &str, end: &str) -> Result<Vec<Token<'a>>> {
+fn tokenize<'a>(
+    string: &'a str,
+    start: &str,
+    end: &str,
+    locale_name: &LocaleName,
+) -> Result<Vec<Token<'a>>> {
     let mut tokens = vec![];
     let mut idx = 0;
     let start = split_into_slices(start);
     let end = split_into_slices(end);
-    let s = split_into_slices(s);
+    let s = split_into_slices(string);
 
     loop {
         if !within_bounds(&s, idx) {
@@ -101,7 +114,10 @@ fn tokenize<'a>(s: &'a str, start: &str, end: &str) -> Result<Vec<Token<'a>>> {
     if balanced(&tokens) {
         Ok(tokens)
     } else {
-        Err(Error::UnbalancedPlaceholders)
+        Err(Error::UnbalancedPlaceholders {
+            locale_name: locale_name.clone(),
+            string: string.to_string(),
+        })
     }
 }
 
@@ -146,13 +162,13 @@ mod test {
 
     #[test]
     fn test_tokenize_empty_input() {
-        assert_eq!(tokenize("", "{", "}").unwrap(), vec![]);
+        assert_eq!(tokenize("", "{", "}", &test_locale()).unwrap(), vec![]);
     }
 
     #[test]
     fn test_tokenize_without_placeholders() {
         assert_eq!(
-            tokenize("123", "{", "}").unwrap(),
+            tokenize("123", "{", "}", &test_locale()).unwrap(),
             vec![Token::Char("1"), Token::Char("2"), Token::Char("3"),]
         );
     }
@@ -160,7 +176,7 @@ mod test {
     #[test]
     fn test_tokenize_with_simple_placeholders() {
         assert_eq!(
-            tokenize("{bob}", "{", "}").unwrap(),
+            tokenize("{bob}", "{", "}", &test_locale()).unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -174,7 +190,7 @@ mod test {
     #[test]
     fn test_tokenize_with_multi_char_placeholders() {
         assert_eq!(
-            tokenize("[{bob}]", "[{", "}]").unwrap(),
+            tokenize("[{bob}]", "[{", "}]", &test_locale()).unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -188,7 +204,7 @@ mod test {
     #[test]
     fn test_tokenize_with_different_length_char_placeholders() {
         assert_eq!(
-            tokenize("%{bob}", "%{", "}").unwrap(),
+            tokenize("%{bob}", "%{", "}", &test_locale()).unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -202,7 +218,7 @@ mod test {
     #[test]
     fn test_tokenize_with_emojis() {
         assert_eq!(
-            tokenize("%{bob} 😅", "%{", "}").unwrap(),
+            tokenize("%{bob} 😅", "%{", "}", &test_locale()).unwrap(),
             vec![
                 Token::PlaceholderStart,
                 Token::Char("b"),
@@ -217,8 +233,8 @@ mod test {
 
     #[test]
     fn error_when_unbalanced() {
-        match tokenize("%{bob", "%{", "}") {
-            Err(Error::UnbalancedPlaceholders) => {},
+        match tokenize("%{bob", "%{", "}", &test_locale()) {
+            Err(Error::UnbalancedPlaceholders { .. }) => {}
             other => panic!("{:?}", other),
         }
     }
@@ -226,17 +242,21 @@ mod test {
     #[test]
     fn test_parsing_placeholders() {
         assert_eq!(
-            find_placeholders("Hello", "{", "}").unwrap(),
+            find_placeholders("Hello", "{", "}", &test_locale()).unwrap(),
             HashSet::<String>::new()
         );
         assert_eq!(
-            find_placeholders("Hello {name}", "{", "}").unwrap(),
+            find_placeholders("Hello {name}", "{", "}", &test_locale()).unwrap(),
             hashset!["name_".to_string()]
         );
 
         assert_eq!(
-            find_placeholders("{greeting} {name}", "{", "}").unwrap(),
+            find_placeholders("{greeting} {name}", "{", "}", &test_locale()).unwrap(),
             hashset!["greeting_".to_string(), "name_".to_string()],
         );
+    }
+
+    fn test_locale() -> LocaleName {
+        LocaleName::new("test")
     }
 }
