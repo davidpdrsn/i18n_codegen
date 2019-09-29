@@ -5,12 +5,12 @@ description = "Safe localization library using code generation"
 documentation = "https://docs.rs/i18n_codegen"
 edition = "2018"
 homepage = "https://github.com/davidpdrsn/i18n_codegen"
-keywords = ["web"]
+keywords = ["web", "i18n", "localization", "translation"]
 license = "MIT"
 name = "i18n_codegen"
 readme = "README.md"
 repository = "https://github.com/davidpdrsn/i18n_codegen.git"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies]
 syn = "0.15.22"

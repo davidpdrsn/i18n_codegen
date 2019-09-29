@@ -22,6 +22,12 @@ N/A
 
 N/A
 
+## 0.1.1 - 2019-09-29
+
+### Fixed
+
+- Fixed typos in docs.
+
 ## 0.1.0 - 2019-09-29
 
 Initial release.

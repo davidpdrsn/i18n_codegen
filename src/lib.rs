@@ -111,7 +111,7 @@
     missing_docs,
     unused_must_use
 )]
-#![doc(html_root_url = "https://docs.rs/i18n_codegen/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/i18n_codegen/0.1.1")]
 
 extern crate proc_macro;
 extern crate proc_macro2;
