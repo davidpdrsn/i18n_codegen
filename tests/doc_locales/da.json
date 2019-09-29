@@ -1,0 +1,4 @@
+{
+    "hello_world": "Hej, Verden!",
+    "greeting": "Hej {name}"
+}

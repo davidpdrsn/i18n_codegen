@@ -1,3 +1,105 @@
+//! Internationalization library based on code generation.
+//!
+//! By leveraging code generation we are able to prevent common bugs like typos in i18n keys,
+//! missing interpolations, or various mistakes between locales.
+//!
+//! It requires a directory with one JSON file per locale. Here is an example with English and
+//! Danish translations:
+//!
+//! ```json
+//! // tests/doc_locales/en.json
+//! {
+//!     "hello_world": "Hello, World!",
+//!     "greeting": "Hello {name}"
+//! }
+//!
+//! // tests/doc_locales/da.json
+//! {
+//!     "hello_world": "Hej, Verden!",
+//!     "greeting": "Hej {name}"
+//! }
+//! ```
+//!
+//! And in Rust:
+//!
+//! ```
+//! use i18n_codegen::i18n;
+//!
+//! i18n!("tests/doc_locales");
+//!
+//! fn main() {
+//!     assert_eq!("Hello, World!", Locale::En.hello_world());
+//!     assert_eq!("Hej, Verden!", Locale::Da.hello_world());
+//!
+//!     assert_eq!("Hello Bob", Locale::En.greeting(Name("Bob")));
+//!     assert_eq!("Hej Bob", Locale::Da.greeting(Name("Bob")));
+//! }
+//! ```
+//!
+//! ## What gets generated?
+//!
+//! This is what gets generated for the example above:
+//!
+//! ```
+//! // Locale enum with variant for each JSON file
+//! #[derive(Copy, Clone, Debug)]
+//! pub enum Locale {
+//!     En,
+//!     Da,
+//! }
+//!
+//! impl Locale {
+//!     // Each string in the locale files becomes a method on `Locale`
+//!     pub fn hello_world(self) -> String {
+//!         match self {
+//!             Locale::Da => format!("Hej, Verden!"),
+//!             Locale::En => format!("Hello, World!"),
+//!         }
+//!     }
+//!
+//!     // Placeholders in strings become arguments to the methods.
+//!     // For strings with multiple placeholders they must be provided in
+//!     // alphabetical order.
+//!     pub fn greeting(self, name_: Name<'_>) -> String {
+//!         match self {
+//!             Locale::Da => format!("Hej {name}", name = name_.0),
+//!             Locale::En => format!("Hello {name}", name = name_.0),
+//!         }
+//!     }
+//! }
+//!
+//! // A placeholder for strings such as `"Hello {name}"`.
+//! pub struct Name<'a>(pub &'a str);
+//!
+//! fn main() {
+//!     assert_eq!("Hello, World!", Locale::En.hello_world());
+//!     assert_eq!("Hej, Verden!", Locale::Da.hello_world());
+//!
+//!     assert_eq!("Hello Bob", Locale::En.greeting(Name("Bob")));
+//!     assert_eq!("Hej Bob", Locale::Da.greeting(Name("Bob")));
+//! }
+//! ```
+//!
+//! It expects all the JSON keys to be lowercase and will replace `-` and `_` with `.`
+//!
+//! ## Customizing placeholders
+//!
+//! By default it will assume you use `{` and `}` for placeholders such as `"Hello {name}"`. That can be
+//! customized like so:
+//!
+//! ```
+//! # use i18n_codegen::i18n;
+//! #
+//! i18n!("tests/locales_with_different_placeholders", open: "%{", close: "}");
+//! #
+//! # fn main() {
+//! #     assert_eq!("Hello Bob", Locale::En.greeting_different_placeholder(PercentPlaceholder("Bob")));
+//! #     assert_eq!("Hej Bob", Locale::Da.greeting_different_placeholder(PercentPlaceholder("Bob")));
+//! # }
+//! ```
+//!
+//! There is currently no support for escaping placeholders.
+
 #![deny(unused_imports, dead_code, unused_variables)]
 
 extern crate proc_macro;
@@ -22,6 +124,7 @@ use syn::{
     Token,
 };
 
+/// See root module for more info.
 #[proc_macro]
 pub fn i18n(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = match syn::parse::<Input>(input) {
@@ -341,9 +444,10 @@ fn build_keys_from_json(
         .map(|(key, value)| {
             let placeholders = find_placeholders(&value, &config.open, &config.close, locale_name)?;
             let value = value.replace(&config.open, "{").replace(&config.close, "}");
+            let key = key.replace(".", "_").replace("-", "_");
 
             Ok(I18nKey {
-                key: Key(key.replace(".", "_")),
+                key: Key(key),
                 translation: Translation(value),
                 placeholders: Placeholders(placeholders),
             })
