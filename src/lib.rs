@@ -311,7 +311,7 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
                 let translation = translation.0.to_string();
 
                 let body = if placeholders.is_empty() {
-                    quote! { format!(#translation) }
+                    quote! { #translation }
                 } else {
                     let fields = placeholders.iter().filter_map(|(placeholder, placeholder_type)| {
                         let mut format_key = placeholder.to_string();
@@ -348,13 +348,24 @@ fn gen_i18n_struct(translations: Translations, out: &mut TokenStream) {
                 }
             });
 
-            quote! {
+            if placeholders.is_empty() {
+                quote! {
+                #[allow(missing_docs)]
+                pub fn #name(self) -> &'static str {
+                    match self {
+                        #(#match_arms),*
+                    }
+                }
+            }
+            } else {
+                quote! {
                 #[allow(missing_docs)]
                 pub fn #name(self, #(#args),*) -> String {
                     match self {
                         #(#match_arms),*
                     }
                 }
+            }
             }
         })
         .collect::<Vec<_>>();
