@@ -6,5 +6,5 @@
     "missing_interpolation_en": "da foo {word}",
     "rust_keyword": "hva så {type}",
     "duplicate_placeholders": "Hej {name}. Er dit navn {name}?",
-    "two_placeholders": "da {one} {two}"
+    "two_placeholders": "da {one} 0x{two:02X!u8}"
 }
