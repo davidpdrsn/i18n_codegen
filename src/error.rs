@@ -10,7 +10,7 @@ pub(crate) enum Error {
     Io(std::io::Error),
     MissingEnvVar {
         name: String,
-        inner_error: std::env::VarError,
+        _inner_error: std::env::VarError,
     },
     DirectoryInLocalesFolder,
     NoFileStem,
@@ -90,7 +90,7 @@ impl Error {
         let name = name.into();
         move |var_error| Error::MissingEnvVar {
             name,
-            inner_error: var_error,
+            _inner_error: var_error,
         }
     }
 }

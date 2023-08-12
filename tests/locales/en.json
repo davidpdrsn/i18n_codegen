@@ -6,5 +6,5 @@
     "missing_interpolation_en": "en foo",
     "rust_keyword": "yo {type}",
     "duplicate_placeholders": "Hey {name}. Is your name {name}?",
-    "two_placeholders": "en {one} {two}"
+    "two_placeholders": "en {one} 0x{two:02X!u8}"
 }

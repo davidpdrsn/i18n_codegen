@@ -5,33 +5,60 @@ use crate::{
 use std::collections::HashSet;
 
 pub(crate) fn find_placeholders(
-    s: &str,
+    s: &mut String,
     start: &str,
     end: &str,
     locale_name: &LocaleName,
-) -> Result<HashSet<String>> {
+) -> Result<HashSet<(String, Option<String>)>> {
     let tokens = tokenize(s, start, end, locale_name)?;
 
     let mut acc = HashSet::new();
 
     let mut inside_placeholder = false;
+    let mut inside_placeholder_format = false;
+    let mut inside_placeholder_type = false;
     let mut current_placeholder = String::new();
+    let mut current_placeholder_type = String::new();
+
+    let mut rebuilded = String::with_capacity(s.len());
 
     for token in tokens {
         if token.is_start() {
             inside_placeholder = true;
+            rebuilded.push('{');
         } else if token.is_end() {
             inside_placeholder = false;
+            inside_placeholder_format = false;
+            inside_placeholder_type = false;
 
             // This is necessary to allow placeholder to be Rust keywords
             current_placeholder.push('_');
 
-            acc.insert(current_placeholder);
+            acc.insert((current_placeholder, if current_placeholder_type.is_empty() { None } else { Some(current_placeholder_type) } ));
             current_placeholder = String::new();
+            current_placeholder_type = String::new();
+            rebuilded.push('}');
         } else if inside_placeholder {
-            current_placeholder.push_str(token.token())
+            if token.is_type_separator() {
+                inside_placeholder_format = false;
+                inside_placeholder_type = true;
+            } else if token.is_format_separator() && !inside_placeholder_type {
+                inside_placeholder_format = true;
+                rebuilded.push(':');
+            } else if inside_placeholder_type {
+                current_placeholder_type.push_str(token.token())
+            } else if inside_placeholder_format {
+                rebuilded.push(token.token().chars().next().unwrap());
+            } else {
+                current_placeholder.push_str(token.token());
+                rebuilded.push(token.token().chars().next().unwrap());
+            }
+        } else {
+            rebuilded.push(token.token().chars().next().unwrap());
         }
     }
+
+    *s = rebuilded;
 
     Ok(acc)
 }
@@ -54,6 +81,22 @@ impl<'a> Token<'a> {
 
     fn is_end(&self) -> bool {
         if let Token::PlaceholderEnd = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_format_separator(&self) -> bool {
+        if let Token::Char(":") = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_type_separator(&self) -> bool {
+        if let Token::Char("!") = self {
             true
         } else {
             false
@@ -240,18 +283,24 @@ mod test {
     #[test]
     fn test_parsing_placeholders() {
         assert_eq!(
-            find_placeholders("Hello", "{", "}", &test_locale()).unwrap(),
-            HashSet::<String>::new()
+            find_placeholders(&mut "Hello".to_string(), "{", "}", &test_locale()).unwrap(),
+            HashSet::<(String, Option<String>)>::new()
         );
         assert_eq!(
-            find_placeholders("Hello {name}", "{", "}", &test_locale()).unwrap(),
-            hashset!["name_".to_string()]
+            find_placeholders(&mut "Hello {name}".to_string(), "{", "}", &test_locale()).unwrap(),
+            hashset![("name_".to_string(), None)]
         );
 
         assert_eq!(
-            find_placeholders("{greeting} {name}", "{", "}", &test_locale()).unwrap(),
-            hashset!["greeting_".to_string(), "name_".to_string()],
+            find_placeholders(&mut "{greeting} {name}.to_string()".to_string(), "{", "}", &test_locale()).unwrap(),
+            hashset![("greeting_".to_string(), None), ("name_".to_string(), None)],
         );
+        let mut translated = "Number {number!u8}".to_string();
+        assert_eq!(
+            find_placeholders(&mut translated, "{", "}", &test_locale()).unwrap(),
+            hashset![("number_".to_string(), Some("u8".to_string()))]
+        );
+        assert_eq!(translated, "Number {number}")
     }
 
     fn test_locale() -> LocaleName {

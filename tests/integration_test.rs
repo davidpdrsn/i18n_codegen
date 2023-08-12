@@ -49,13 +49,17 @@ fn it_works_for_duplicate_placeholders() {
 #[test]
 fn it_works_for_multiple_placeholders() {
     assert_eq!(
-        "en one two",
-        Locale::En.two_placeholders(One("one"), Two("two"))
+        "en one 0x42",
+        Locale::En.two_placeholders(One("one"), 66)
+    );
+    assert_eq!(
+        "en one 0x42",
+        Locale::En.two_placeholders(One("one"), 0x42)
     );
 
     assert_eq!(
-        "da one two",
-        Locale::Da.two_placeholders(One("one"), Two("two"))
+        "da one 0x42",
+        Locale::Da.two_placeholders(One("one"), 0x42)
     );
 }
 
