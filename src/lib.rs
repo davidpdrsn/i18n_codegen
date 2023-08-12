@@ -465,13 +465,13 @@ fn validate_translations(translations: &Translations) -> Result<()> {
     }
 }
 
-fn all_keys<'a>(translations: &'a Translations) -> HashSet<&'a Key> {
+fn all_keys(translations: &Translations) -> HashSet<&Key> {
     translations.keys().collect()
 }
 
-fn keys_per_locale<'a>(
-    translations: &'a Translations,
-) -> HashMap<&'a LocaleName, HashSet<&'a Key>> {
+fn keys_per_locale(
+    translations: &Translations,
+) -> HashMap<&LocaleName, HashSet<&Key>> {
     let mut acc = HashMap::new();
 
     for (key, translations_for_key) in translations {
@@ -489,7 +489,7 @@ const CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
 
 fn find_locale_files<P: AsRef<Path>>(locales_path: P) -> Result<Vec<PathBuf>> {
     let cargo_dir =
-        std::env::var(CARGO_MANIFEST_DIR).map_err(Error::missing_env_var(CARGO_MANIFEST_DIR))?;
+        env::var(CARGO_MANIFEST_DIR).map_err(Error::missing_env_var(CARGO_MANIFEST_DIR))?;
 
     let pwd = PathBuf::from(cargo_dir);
     let full_locales_path = pwd.join(locales_path);
